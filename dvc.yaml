@@ -1,1 +1,34 @@
+stages:
+  evaluate_yolov8:
+    cmd: python src/train_mlflow.py
+      --model-path models/yolo8n_waste.pt
+      --version yolov8
+      --data-yaml data/Yolo8/data_v8.yaml
+      --tracking-uri http://localhost:5001
+      --promote
+    deps:
+      - src/train_mlflow.py
+      - src/predict.py
+      - models/yolo8n_waste.pt
+      - data/Yolo8/data_v8.yaml
+    params:
+      - params.yaml:
+          - yolov8.conf_threshold
+          - yolov8.imgsz
 
+  evaluate_yolov11:
+    cmd: python src/train_mlflow.py
+      --model-path models/yolo11n_waste.pt
+      --version yolov11
+      --data-yaml data/Yolo11/data_v11.yaml
+      --tracking-uri http://localhost:5001
+      --promote
+    deps:
+      - src/train_mlflow.py
+      - src/predict.py
+      - models/yolo11n_waste.pt
+      - data/Yolo11/data_v11.yaml
+    params:
+      - params.yaml:
+          - yolov11.conf_threshold
+          - yolov11.imgsz

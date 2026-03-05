@@ -1,0 +1,7 @@
+yolov8:
+  conf_threshold: 0.45
+  imgsz: 640
+
+yolov11:
+  conf_threshold: 0.45
+  imgsz: 640
