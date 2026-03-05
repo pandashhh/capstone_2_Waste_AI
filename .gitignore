@@ -136,3 +136,24 @@ models/*
 
 #config file has sensitive data
 .mlflow_uri
+
+# Datasets (tracked via DVC)
+data/Yolo8/train/
+data/Yolo8/valid/
+data/Yolo8/test/
+data/Yolo11/train/
+data/Yolo11/valid/
+data/Yolo11/test/
+data/Yolo8/README.dataset.txt
+data/Yolo8/README.roboflow.txt
+data/Yolo11/README.dataset.txt
+data/Yolo11/README.roboflow.txt
+
+# MLflow local store
+mlflow_store/
+
+# YOLO training runs
+runs/
+
+# macOS
+.DS_Store

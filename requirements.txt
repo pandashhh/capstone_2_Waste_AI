@@ -26,3 +26,8 @@ prometheus-fastapi-instrumentator==7.0.0
 # Frontend
 streamlit==1.38.0
 requests==2.32.3
+
+# MLflow + GCS
+mlflow==2.16.0
+google-cloud-storage==2.18.0
+boto3==1.35.0
