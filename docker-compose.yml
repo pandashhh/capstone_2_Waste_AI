@@ -1,1 +1,59 @@
+services:
 
+  # ── FastAPI Prediction API ──────────────────────────────────────────────────
+  api:
+    build: .
+    container_name: wastevision-api
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+    volumes:
+      - ./models:/app/models
+    depends_on:
+      - mlflow
+    restart: unless-stopped
+
+  # ── MLflow Tracking Server ──────────────────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.16.0
+    container_name: wastevision-mlflow
+    ports:
+      - "5001:5001"
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow_store/mlflow.db
+      --default-artifact-root /mlflow_store/artifacts
+      --host 0.0.0.0
+      --port 5001
+    volumes:
+      - ./mlflow_store:/mlflow_store
+    restart: unless-stopped
+
+  # ── Prometheus ──────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: wastevision-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # ── Grafana ─────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: wastevision-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=wastevision
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    restart: unless-stopped

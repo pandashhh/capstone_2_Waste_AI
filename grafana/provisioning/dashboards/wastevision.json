@@ -1,0 +1,78 @@
+{
+  "title": "WasteVision MLOps",
+  "uid": "wastevision-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate (req/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{app_name=\"wastevision\"}[1m]) * 60",
+          "legendFormat": "{{method}} {{handler}} {{status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Response Time p95 (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Detections per Model Version",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(wastevision_detections_total[5m])",
+          "legendFormat": "{{model_version}} / {{class_name}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Prediction Requests per Version",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "wastevision_predict_requests_total",
+          "legendFormat": "{{model_version}}"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "title": "Confidence Score Distribution",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(wastevision_confidence_score_bucket[5m]))",
+          "legendFormat": "p50 {{model_version}}"
+        },
+        {
+          "expr": "histogram_quantile(0.90, rate(wastevision_confidence_score_bucket[5m]))",
+          "legendFormat": "p90 {{model_version}}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 """
-WasteVision FastAPI – Tag 2 Update
+WasteVision FastAPI – Tag 5 Update
 
-Neu: Modelle werden aus dem MLflow Model Registry geladen.
-     Fallback auf lokale .pt Dateien wenn MLflow nicht erreichbar.
+Neu: Prometheus-Metriken fuer Monitoring.
+     Custom Metrics: Anzahl Detektionen, Confidence-Scores pro Modell.
 """
 
 import io
@@ -12,9 +12,31 @@ from PIL import Image
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 import uvicorn
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Counter, Histogram
 
 from src.predict import load_model, predict_from_pil, YOLO8_CLASSES, YOLO11_CLASSES
 from src.schemas import PredictionResponse, HealthResponse, ModelInfoResponse, Detection
+
+# ─── Custom Prometheus Metrics ────────────────────────────────────────────────
+detections_total = Counter(
+    "wastevision_detections_total",
+    "Gesamtanzahl der erkannten Objekte",
+    ["model_version", "class_name"],
+)
+
+confidence_histogram = Histogram(
+    "wastevision_confidence_score",
+    "Verteilung der Confidence-Scores",
+    ["model_version"],
+    buckets=[0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0],
+)
+
+requests_per_version = Counter(
+    "wastevision_predict_requests_total",
+    "Anzahl der Prediction-Requests pro Modellversion",
+    ["model_version"],
+)
 
 # ---------------------------------------------------------------------------
 # Config
@@ -37,8 +59,11 @@ CLASS_NAMES = {
 app = FastAPI(
     title="WasteVision API",
     description="Waste detection – YOLOv8 (7 Klassen) & YOLOv11 (26 Klassen)",
-    version="2.0.0",
+    version="3.0.0",
 )
+
+# Prometheus HTTP-Metriken (Request-Rate, Latenz, Status-Codes)
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 _models: dict = {}
 _model_source: dict = {}
@@ -137,6 +162,15 @@ async def predict(
     model = get_model(version)
     result = predict_from_pil(model, pil_image, conf_threshold=conf_threshold)
     detections = [Detection(**d) for d in result["detections"]]
+
+    # Custom Metriken aktualisieren
+    requests_per_version.labels(model_version=version).inc()
+    for det in result["detections"]:
+        detections_total.labels(
+            model_version=version,
+            class_name=det["class_name"],
+        ).inc()
+        confidence_histogram.labels(model_version=version).observe(det["confidence"])
 
     return PredictionResponse(
         model_version=version,
