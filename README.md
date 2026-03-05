@@ -1,138 +1,174 @@
-# ds-modeling-pipeline
+# WasteVision MLOps Pipeline
 
-Here you find a Skeleton project for building a simple model in a python script or notebook and log the results on MLFlow.
+Waste detection using YOLOv8 and YOLOv11 with a full MLOps infrastructure.
+Built on top of Capstone 1 (transfer learning on YOLO models).
 
-There are two ways to do it: 
-* In Jupyter Notebooks:
-    We train a simple model in the [jupyter notebook](notebooks/EDA-and-modeling.ipynb), where we select only some features and do minimal cleaning. The hyperparameters of feature engineering and modeling will be logged with MLflow
+## Architecture
 
-* With Python scripts:
-    The [main script](modeling/train.py) will go through exactly the same process as the jupyter notebook and also log the hyperparameters with MLflow
+```
+Streamlit Frontend
+      |
+      v
+FastAPI (Port 8000)          <-- /metrics --> Prometheus (9090) --> Grafana (3000)
+      |
+      v
+MLflow Model Registry (5001)
+      |
+      v
+Prefect Evaluation Pipeline
+      |
+   +--+--+
+   |     |
+YOLOv8  YOLOv11
+(7 Klassen) (26 Klassen)
+```
 
-Data used is the [coffee quality dataset](https://github.com/jldbc/coffee-quality-database).
+## Models
 
-## Requirements:
+| Modell | Klassen | Datensatz |
+|--------|---------|-----------|
+| YOLOv8 | 7 | cardboard, food_organics, glass, metal, miscellaneous_trash, paper, plastic |
+| YOLOv11 | 26 | aerosol_cans, aluminum_cans, cardboard_boxes, clothing, coffee_grounds, ... |
 
-- pyenv with Python: 3.11.3
+## Tech Stack
 
-### Setup
+| Thema | Tool |
+|-------|------|
+| API | FastAPI + Pydantic |
+| ML Tracking | MLflow |
+| Pipeline Orchestration | Prefect |
+| Data Versioning | DVC |
+| Testing | pytest (Unit, Integration, Behavioral) |
+| CI/CD | GitHub Actions |
+| Monitoring | Prometheus + Grafana |
+| Containerization | Docker + Docker Compose |
 
-Use the requirements file in this repo to create a new environment.
+## Quickstart
 
-```BASH
-make setup
+### Setup (lokal)
 
-#or
-
+```bash
 pyenv local 3.11.3
 python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements_dev.txt
+pip install -r requirements.txt
 ```
 
-The `requirements.txt` file contains the libraries needed for deployment.. of model or dashboard .. thus no jupyter or other libs used during development.
-
-The MLFLOW URI should **not be stored on git**, you have two options, to save it locally in the `.mlflow_uri` file:
-
-```BASH
-echo http://127.0.0.1:5000/ > .mlflow_uri
-```
-
-This will create a local file where the uri is stored which will not be added on github (`.mlflow_uri` is in the `.gitignore` file). Alternatively you can export it as an environment variable with
+### Modelle platzieren
 
 ```bash
-export MLFLOW_URI=http://127.0.0.1:5000/
+# .pt Dateien aus Capstone 1 in models/ kopieren
+cp /pfad/zu/yolo8n_waste.pt  models/
+cp /pfad/zu/yolo11n_waste.pt models/
 ```
 
-This links to your local mlflow, if you want to use a different one, then change the set uri.
-
-The code in the [config.py](modeling/config.py) will try to read it locally and if the file doesn't exist will look in the env var.. IF that is not set the URI will be empty in your code.
-
-## Usage
-
-### Creating an MLFlow experiment
-
-You can do it via the GUI or via [command line](https://www.mlflow.org/docs/latest/tracking.html#managing-experiments-and-runs-with-the-tracking-service-api) if you use the local mlflow:
+### Stack starten (lokal ohne Docker)
 
 ```bash
-mlflow experiments create --experiment-name 0-template-ds-modeling
+# Terminal 1 – MLflow Server
+./start_mlflow.sh local          # UI: http://localhost:5001
+
+# Terminal 2 – FastAPI
+uvicorn api.main:app --reload    # UI: http://localhost:8000/docs
+
+# Terminal 3 – Streamlit (optional)
+streamlit run app.py             # UI: http://localhost:8501
 ```
 
-Check your local mlflow
+### Prefect Pipeline (Evaluation + Promotion)
 
 ```bash
-mlflow ui
+# Prefect einmalig konfigurieren (falls noch nicht geschehen)
+prefect config set PREFECT_SERVER_ALLOW_EPHEMERAL_MODE=true
+
+# Pipeline starten (MLflow muss laufen)
+python src/pipeline.py
 ```
 
-and open the link [http://127.0.0.1:5000](http://127.0.0.1:5000)
+Die Pipeline:
+1. Validiert ob alle Modell- und Datendateien vorhanden sind
+2. Evaluiert beide Modelle via `model.val()` und loggt Metriken in MLflow
+3. Setzt das Modell mit höherem mAP50 als `champion`, das andere als `challenger`
 
-This will throw an error if the experiment already exists. **Save the experiment name in the [config file](modeling/config.py).**
-
-In order to train the model and store test data in the data folder and the model in models run:
+### MLflow Modell manuell loggen
 
 ```bash
-#activate env
-source .venv/bin/activate
-
-python -m modeling.train
+python src/train_mlflow.py \
+    --model-path models/yolo8n_waste.pt \
+    --version yolov8 \
+    --data-yaml data/Yolo8/data_v8.yaml \
+    --promote
 ```
 
-In order to test that predict works on a test set you created run:
+### DVC Pipeline
 
 ```bash
-python modeling/predict.py models/linear data/X_test.csv data/y_test.csv
+dvc repro          # Führt alle Stages aus wenn Dependencies sich geändert haben
+dvc params diff    # Zeigt Parameteränderungen
 ```
 
-## About MLFLOW -- delete this when using the template
+### Tests
 
-MLFlow is a tool for tracking ML experiments. You can run it locally or remotely. It stores all the information about experiments in a database.
-And you can see the overview via the GUI or access it via APIs. Sending data to mlflow is done via APIs. And with mlflow you can also store models on S3 where you version them and tag them as production for serving them in production.
-![mlflow workflow](images/0_general_tracking_mlflow.png)
-
-### MLFlow GUI
-
-You can group model trainings in experiments. The granularity of what an experiment is up to your usecase. Recommended is to have an experiment per data product, as for all the runs in an experiment you can compare the results.
-![gui](images/1_gui.png)
-
-### Code to send data to MLFlow
-
-In order to send data about your model you need to set the connection information, via the tracking uri and also the experiment name (otherwise the default one is used). One run represents a model, and all the rest is metadata. For example if you want to save train MSE, test MSE and validation MSE you need to name them as 3 different metrics.
-If you are doing CV you can set the tracking as nested.
-![mlflow code](images/2_code.png)
-
-### MLFlow metadata
-
-There is no constraint between runs to have the same metadata tracked. I.e. for one run you can track different tags, different metrics, and different parameters (in cv some parameters might not exist for some runs so this .. makes sense to be flexible).
-
-- tags can be anything you want.. like if you do CV you might want to tag the best model as "best"
-- params are perfect for hypermeters and also for information about the data pipeline you use, if you scaling vs normalization and so on
-- metrics.. should be numeric values as these can get plotted
-
-![mlflow metadata](images/3_metadata.png)
-
-## Development Notes
-
-### Handling Merge Conflicts in Jupyter Notebooks
-
-When working collaboratively, merge conflicts may occur in `.ipynb` files because notebooks are stored as JSON.  
-To simplify resolving these conflicts, this project uses **nbdime** (already included in `requirements_dev.txt`).
-
-#### Enable once
-After setting up your environment, enable nbdime for Git:
 ```bash
-nbdime config-git --enable
+pytest tests/ -v --ignore=tests/test_api
 ```
 
-#### When a merge conflict occurs
-Run the following command to open the merge tool:
+## Docker Compose (kompletter Stack)
+
 ```bash
-nbdime mergetool
+docker compose up --build
 ```
-A browser window will open showing both notebook versions side by side.
-Select the correct cells, save, and then complete the merge:
-```bash
-git add <notebook>.ipynb
-git commit -m "Resolve notebook merge conflict"
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| FastAPI | http://localhost:8000/docs | - |
+| MLflow | http://localhost:5001 | - |
+| Prometheus | http://localhost:9090 | - |
+| Grafana | http://localhost:3000 | admin / wastevision |
+
+## Monitoring Metriken
+
+Folgende Custom Metriken werden von der FastAPI an Prometheus geliefert:
+
+| Metrik | Typ | Beschreibung |
+|--------|-----|--------------|
+| `wastevision_predict_requests_total` | Counter | Requests pro Modellversion |
+| `wastevision_detections_total` | Counter | Erkannte Objekte nach Klasse |
+| `wastevision_confidence_score` | Histogram | Verteilung der Confidence-Scores |
+| `http_request_duration_seconds` | Histogram | API Latenz (automatisch) |
+
+Das Grafana Dashboard (vorprovisioniert) zeigt Request-Rate, Latenz (p50/p95), Detections und Confidence-Verteilung.
+
+## CI/CD
+
+GitHub Actions führt bei jedem Push/PR auf `main` automatisch alle Tests aus.
+Status: siehe Actions Tab im Repository.
+
+## Projektstruktur
+
 ```
-That’s it — clean merges for notebooks!
+.
+├── api/
+│   └── main.py              # FastAPI mit Prometheus Metriken
+├── src/
+│   ├── predict.py            # YOLO Inferenz-Logik
+│   ├── schemas.py            # Pydantic Schemas
+│   ├── train_mlflow.py       # MLflow Logging + Model Registry
+│   └── pipeline.py           # Prefect Evaluation Flow
+├── tests/
+│   ├── test_day1.py          # Unit + Integration Tests (FastAPI)
+│   ├── test_day2.py          # MLflow Tests
+│   ├── test_day3.py          # Pipeline + DVC Tests
+│   └── test_behavioral.py    # Behavioral Tests (Modellverhalten)
+├── data/
+│   ├── Yolo8/data_v8.yaml   # Dataset Config (7 Klassen)
+│   └── Yolo11/data_v11.yaml # Dataset Config (26 Klassen)
+├── prometheus/prometheus.yml  # Scrape Config
+├── grafana/provisioning/      # Auto-provisioned Dashboard
+├── docker-compose.yml         # Gesamter Stack
+├── Dockerfile                 # FastAPI Container
+├── dvc.yaml                   # DVC Pipeline Stages
+├── params.yaml                # Modell-Parameter
+└── start_mlflow.sh            # MLflow Startup Script
+```
