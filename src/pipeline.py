@@ -109,6 +109,12 @@ def promote_best_model(run_ids: dict) -> str:
             f"(mAP50={scores[version]:.4f})"
         )
 
+    # Global champion als Experiment-Tag speichern (wird von der API gelesen)
+    experiment = client.get_experiment_by_name("wastevision-waste-detection")
+    if experiment:
+        client.set_experiment_tag(experiment.experiment_id, "global_champion", best)
+        logger.info(f"Experiment-Tag 'global_champion' gesetzt auf: {best}")
+
     logger.info(f"Champion: {best} (mAP50={scores[best]:.4f})")
     return best
 

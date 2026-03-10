@@ -2,7 +2,7 @@
 WasteVision FastAPI – Tag 5 Update
 
 Neu: Prometheus-Metriken fuer Monitoring.
-     Custom Metrics: Anzahl Detektionen, Confidence-Scores pro Modell.
+     Custom Metrics: Anzahl Detektionen, Confidence-Scores pro Modell
 """
 
 import io
@@ -69,6 +69,23 @@ _models: dict = {}
 _model_source: dict = {}
 
 
+def get_global_champion() -> str:
+    """
+    Liest den 'global_champion' Tag aus dem MLflow Experiment.
+    Fallback auf 'yolov8' wenn MLflow nicht erreichbar oder Tag nicht gesetzt.
+    """
+    try:
+        import mlflow
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        client = mlflow.tracking.MlflowClient()
+        experiment = client.get_experiment_by_name("wastevision-waste-detection")
+        if experiment and "global_champion" in experiment.tags:
+            return experiment.tags["global_champion"]
+    except Exception:
+        pass
+    return "yolov8"
+
+
 def get_model(version: str):
     """
     Lädt Modell aus MLflow Registry (champion alias).
@@ -109,6 +126,17 @@ def get_model(version: str):
     return _models[version]
 
 
+@app.get("/champion")
+def champion_info():
+    """Gibt die aktuell aktive Champion-Modellversion zurück."""
+    version = get_global_champion()
+    return {
+        "champion_version": version,
+        "num_classes": len(CLASS_NAMES[version]),
+        "class_names": CLASS_NAMES[version],
+    }
+
+
 @app.get("/")
 def root():
     return {
@@ -142,6 +170,16 @@ def model_info(
         class_names=CLASS_NAMES[version],
         conf_threshold=conf_threshold,
     )
+
+
+@app.post("/predict", response_model=PredictionResponse)
+async def predict_champion(
+    file: UploadFile = File(...),
+    conf_threshold: float = Query(default=0.45, ge=0.0, le=1.0),
+):
+    """Sendet das Bild an das aktuell aktive Champion-Modell."""
+    version = get_global_champion()
+    return await predict(version, file, conf_threshold)
 
 
 @app.post("/predict/{version}", response_model=PredictionResponse)

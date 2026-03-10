@@ -22,12 +22,6 @@ st.caption("Powered by YOLOv8 & YOLOv11 | WasteVision MLOps Project")
 # ─── Sidebar ─────────────────────────────────────────────────────────────────
 st.sidebar.header("⚙️ Einstellungen")
 
-model_version = st.sidebar.radio(
-    "Modell auswählen",
-    options=["yolov8", "yolov11"],
-    captions=["7 Klassen (grob)", "26 Klassen (detailliert)"],
-)
-
 conf_threshold = st.sidebar.slider(
     "Konfidenz-Schwellwert",
     min_value=0.1,
@@ -36,7 +30,7 @@ conf_threshold = st.sidebar.slider(
     step=0.05,
 )
 
-# ─── API Health Check ─────────────────────────────────────────────────────────
+# ─── API Health Check + Champion Info ────────────────────────────────────────
 with st.sidebar:
     st.divider()
     try:
@@ -45,12 +39,19 @@ with st.sidebar:
     except Exception:
         st.warning("⚠️ API nicht erreichbar.\nStarte die FastAPI mit:\n`uvicorn api.main:app`")
 
-# ─── Model Info ──────────────────────────────────────────────────────────────
+# ─── Champion Model Info ──────────────────────────────────────────────────────
+try:
+    champion_data = requests.get(f"{API_URL}/champion", timeout=2).json()
+    model_version = champion_data["champion_version"]
+    st.info(f"🏆 Aktives Modell: **{model_version}** (Pipeline-Champion) – {champion_data['num_classes']} Klassen")
+except Exception:
+    model_version = "yolov8"
+    st.info("🏆 Aktives Modell: **yolov8** (Standard-Fallback)")
+
 with st.expander(f"ℹ️ Klassen für {model_version}"):
     try:
-        info = requests.get(f"{API_URL}/models/{model_version}", timeout=2).json()
         cols = st.columns(3)
-        for i, name in enumerate(info["class_names"]):
+        for i, name in enumerate(champion_data.get("class_names", [])):
             cols[i % 3].write(f"• {name}")
     except Exception:
         st.info("Klasseninformation nicht verfügbar (API offline)")
@@ -75,7 +76,7 @@ if uploaded_file is not None:
                 buf.seek(0)
 
                 response = requests.post(
-                    f"{API_URL}/predict/{model_version}",
+                    f"{API_URL}/predict",
                     files={"file": ("image.jpg", buf, "image/jpeg")},
                     params={"conf_threshold": conf_threshold},
                     timeout=30,
