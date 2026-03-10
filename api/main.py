@@ -5,6 +5,7 @@ Neu: Prometheus-Metriken fuer Monitoring.
      Custom Metrics: Anzahl Detektionen, Confidence-Scores pro Modell
 """
 
+import base64
 import io
 import os
 import numpy as np
@@ -201,6 +202,13 @@ async def predict(
     result = predict_from_pil(model, pil_image, conf_threshold=conf_threshold)
     detections = [Detection(**d) for d in result["detections"]]
 
+    # Annotiertes Bild (BGR numpy array von YOLO) als Base64-JPEG kodieren
+    annotated_bgr = result["annotated_image"]
+    annotated_pil = Image.fromarray(annotated_bgr[..., ::-1])  # BGR → RGB
+    buf = io.BytesIO()
+    annotated_pil.save(buf, format="JPEG", quality=85)
+    annotated_b64 = base64.b64encode(buf.getvalue()).decode()
+
     # Custom Metriken aktualisieren
     requests_per_version.labels(model_version=version).inc()
     for det in result["detections"]:
@@ -215,6 +223,7 @@ async def predict(
         num_detections=result["num_detections"],
         detections=detections,
         message="Erkennung erfolgreich" if detections else "Kein Müll über Schwellwert erkannt",
+        annotated_image_b64=annotated_b64,
     )
 
 

@@ -22,6 +22,7 @@ class PredictionResponse(BaseModel):
     num_detections: int
     detections: List[Detection]
     message: str = "OK"
+    annotated_image_b64: Optional[str] = None  # Base64-kodiertes JPEG mit Bounding Boxes
 
 
 class HealthResponse(BaseModel):

@@ -5,6 +5,7 @@ Eingabe: Bild-Upload oder Kamera-Snapshot
 Ausgabe: Detektionen vom Champion-Modell via FastAPI
 """
 
+import base64
 import io
 import os
 import requests
@@ -76,12 +77,19 @@ def run_prediction(image: Image.Image) -> None:
 
             st.success(f"✅ {result['num_detections']} Objekt(e) erkannt")
 
+            # Annotiertes Bild mit Bounding Boxes anzeigen
+            if result.get("annotated_image_b64"):
+                img_bytes = base64.b64decode(result["annotated_image_b64"])
+                annotated = Image.open(io.BytesIO(img_bytes))
+                st.image(annotated, caption="Erkennungen", use_column_width=True)
+
+            # Detektions-Liste darunter
             if result["detections"]:
-                st.subheader("📊 Erkennungen")
-                for det in result["detections"]:
-                    col1, col2 = st.columns([3, 1])
-                    col1.write(f"**{det['class_name']}**")
-                    col2.progress(det["confidence"], text=f"{det['confidence']:.0%}")
+                with st.expander("📊 Detektions-Details"):
+                    for det in result["detections"]:
+                        col1, col2 = st.columns([3, 1])
+                        col1.write(f"**{det['class_name']}**")
+                        col2.progress(det["confidence"], text=f"{det['confidence']:.0%}")
             else:
                 st.info("Kein Müll über dem Schwellwert erkannt.")
 
